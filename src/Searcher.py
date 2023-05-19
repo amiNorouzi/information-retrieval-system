@@ -1,16 +1,21 @@
+import nltk
 import pandas as pd
+from nltk.corpus import stopwords
 from parsivar import FindStems
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from src.Tokenizer import Tokenizer
 from src.utils import to_path
 
+nltk.download('stopwords')
+
 
 class Searcher:
     # ? static properties
     stemmer = FindStems()
     persian_stopwords_file = open(to_path("persian_stopwords.txt"), 'r', encoding='utf-8')
-    persian_stopwords = [x[:-1] for x in persian_stopwords_file.readlines()]
+    persian_stop_words = [x[:-1] for x in persian_stopwords_file.readlines()]
+    english_stop_words = set(stopwords.words('english'))
     vector = TfidfVectorizer()
 
     def __init__(self, src: str):
@@ -48,11 +53,11 @@ class Searcher:
             print("Not Found")
 
     # ? delete stop words
-    def remove_stopwords(self):
+    def remove_stop_words(self):
         def rm_per_sw(words: list[str]):
             main_words: list[str] = []
             for word in words:
-                if word not in Searcher.persian_stopwords:
+                if word not in Searcher.persian_stop_words and word not in Searcher.english_stop_words:
                     main_words.append(word)
             return main_words
 
