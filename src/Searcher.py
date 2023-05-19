@@ -1,3 +1,5 @@
+import os
+
 import nltk
 import pandas as pd
 from nltk.corpus import stopwords
@@ -5,7 +7,7 @@ from parsivar import FindStems
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from src.Tokenizer import Tokenizer
-from src.utils import to_path
+from src.utils import to_path, root_dirname
 
 nltk.download('stopwords')
 
@@ -20,37 +22,9 @@ class Searcher:
 
     def __init__(self, src: str):
         # ? read dataset
+        self.matrix = None
         self.data_frame = pd.read_excel(to_path(src))
         self.data_frame = self.data_frame['text']
-
-        # تعریف ابجکت و فیت کردن داده برای بدست اوردن وزن کلمات در هر داده
-
-        self.matrix = Searcher.vector.fit_transform(self.data_frame).todense()
-
-        # تعریف متغیر ماتریس برای ذخیره اطلاعات و وزن هر کلمه
-        self.matrix = pd.DataFrame(self.matrix, columns=self.vector.get_feature_names_out())
-
-    # تابعی برای جستجوی وزن یک کلمه در ماتریس
-    @staticmethod
-    def search_word(word):
-        # استفاده از ابجکت my_stemmer کلاس FindStems
-        word = Searcher.stemmer.convert_to_stem(word)
-
-        try:
-            # خواندن از فایل csv و استخراج مقدار داده مربوط به کلمه وارد شده
-            df = pd.read_csv('matrix_file.csv')
-
-            # مقدار وزن کلمه مورد نظر محاسبه می‌شود
-            x = df[word].sum()
-
-            # نرمال کردن وزن کلمه
-            first = df.values.min()
-            last = df.values.max()
-            result = (x - first) / (last - first)
-
-            return result
-        except:
-            print("Not Found")
 
     # ? delete stop words
     def remove_stop_words(self):
@@ -80,3 +54,34 @@ class Searcher:
     def tokenize(self):
         tokenizer = Tokenizer()
         self.data_frame = self.data_frame.apply(tokenizer.tokenize)
+
+    # todo
+    def vectorize(self):
+        self.matrix = Searcher.vector.fit_transform(self.data_frame).todense()
+
+    # todo
+    def tf_idf(self):
+        self.matrix = pd.DataFrame(self.matrix, columns=self.vector.get_feature_names_out())
+
+        # تابعی برای جستجوی وزن یک کلمه در ماتریس
+
+    @staticmethod
+    def search_word(word):
+        # استفاده از ابجکت my_stemmer کلاس FindStems
+        word = Searcher.stemmer.convert_to_stem(word)
+
+        try:
+            # خواندن از فایل csv و استخراج مقدار داده مربوط به کلمه وارد شده
+            df = pd.read_csv(os.path.join(root_dirname, 'out', 'matrix_file.csv'))
+
+            # مقدار وزن کلمه مورد نظر محاسبه می‌شود
+            x = df[word].sum()
+
+            # نرمال کردن وزن کلمه
+            first = df.values.min()
+            last = df.values.max()
+            result = (x - first) / (last - first)
+
+            return result
+        except:
+            print("Not Found")
