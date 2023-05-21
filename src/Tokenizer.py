@@ -3,12 +3,12 @@
 import codecs
 import re
 
-from nltk.tokenize.api import TokenizerI
+from pandas import Series
 
 from utils import default_verbs
 
 
-class Tokenizer(TokenizerI):
+class Tokenizer:
     """
     >>> tokenizer = Tokenizer()
     >>> tokenizer.tokenize('این جمله (خیلی) پیچیده نیست!!!')
@@ -48,7 +48,7 @@ class Tokenizer(TokenizerI):
                 self.bons = set([verb.split('#')[0] for verb in self.verbs])
                 self.verbe = set([bon + 'ه' for bon in self.bons] + ['ن' + bon + 'ه' for bon in self.bons])
 
-    def tokenize(self, text):
+    def tokenize(self, text: Series):
         text = self.pattern.sub(r' \1 ', text.replace('\n', ' ').replace('\t', ' '))
 
         tokens = [word for word in text.split(' ') if word]

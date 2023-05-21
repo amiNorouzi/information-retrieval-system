@@ -1,6 +1,8 @@
+import math
 import os
 
 import nltk
+import numpy as np
 import pandas as pd
 from nltk.corpus import stopwords
 from parsivar import FindStems
@@ -10,7 +12,6 @@ from src.Tokenizer import Tokenizer
 from src.utils import to_path, root_dirname
 
 nltk.download('stopwords')
-
 
 class Searcher:
     # ? static properties
@@ -22,7 +23,10 @@ class Searcher:
 
     def __init__(self, src: str):
         # ? read dataset
-        self.matrix = None
+        self.tf_idf_matrix = None
+        self.vocab = None
+        self.term_freq = None
+        self.document_term_matrix = None
         self.data_frame = pd.read_excel(to_path(src))
         self.data_frame = self.data_frame['text']
 
@@ -49,7 +53,7 @@ class Searcher:
         self.data_frame = self.data_frame.apply(lambda x: " ".join(x))
 
     def to_csv(self, path: str):
-        self.matrix.to_csv(path, header=True, index=False)
+        pd.DataFrame(np.array(self.tf_idf_matrix)).to_csv(path)
 
     def tokenize(self):
         tokenizer = Tokenizer()
@@ -57,31 +61,104 @@ class Searcher:
 
     # todo
     def vectorize(self):
-        self.matrix = Searcher.vector.fit_transform(self.data_frame).todense()
+        # convert to lowercase and remove punctuation
+        self.data_frame = self.data_frame.apply(lambda x: x.lower())
+        self.data_frame = self.data_frame.str.replace('[^ws]', '')
 
-    # todo
+        # calculate term frequency
+        self.term_freq = []
+        for text in self.data_frame:
+            word_list = text.split(' ')
+            freq_dict = {}
+            for word in word_list:
+                if word in freq_dict:
+                    freq_dict[word] += 1
+                else:
+                    freq_dict[word] = 1
+            self.term_freq.append(freq_dict)
+
+        # create vocabulary
+        temp_vocab = []
+        for freq_dict in self.term_freq:
+            for word in freq_dict.keys():
+                if word not in temp_vocab:
+                    temp_vocab.append(word)
+        self.vocab = sorted(temp_vocab)
+
+        # create document-term matrix
+        self.document_term_matrix = np.zeros((len(self.term_freq), len(self.vocab)))
+        for i, freq_dict in enumerate(self.term_freq):
+            for j, word in enumerate(self.vocab):
+                if word in freq_dict:
+                    self.document_term_matrix[i, j] = freq_dict[word]
+
     def tf_idf(self):
-        self.matrix = pd.DataFrame(self.matrix, columns=self.vector.get_feature_names_out())
+        num_documents = len(self.document_term_matrix)
+        num_terms = len(self.document_term_matrix[0])
 
-        # تابعی برای جستجوی وزن یک کلمه در ماتریس
+        # Step 1: Calculate TF
+        tf_matrix = [[0] * num_terms for _ in range(num_documents)]
+        for i in range(num_documents):
+            total_terms = sum(self.document_term_matrix[i])
+            for j in range(num_terms):
+                if total_terms:
+                    tf_matrix[i][j] = self.document_term_matrix[i][j] / total_terms
+                else:
+                    tf_matrix[i][j] = 0
 
-    @staticmethod
-    def search_word(word):
-        # استفاده از ابجکت my_stemmer کلاس FindStems
-        word = Searcher.stemmer.convert_to_stem(word)
+        # Step 2: Calculate IDF
+        idf_vector = [0] * num_terms
+        for j in range(num_terms):
+            num_documents_with_term = sum(
+                [1 for i in range(num_documents) if self.document_term_matrix[i][j] > 0]
+            )
+            if num_documents_with_term > 0:
+                idf_vector[j] = math.log(num_documents / num_documents_with_term)
 
-        try:
-            # خواندن از فایل csv و استخراج مقدار داده مربوط به کلمه وارد شده
-            df = pd.read_csv(os.path.join(root_dirname, 'out', 'matrix_file.csv'))
+        # Step 3: Calculate TF-IDF and build the matrix containing the terms
+        tfidf_matrix = [[] for _ in range(num_terms)]
+        for j in range(num_terms):
+            term = self.term_index_map[j]
+            idf = idf_vector[j]
+            for i in range(num_documents):
+                tfidf = tf_matrix[i][j] * idf
+                tfidf_matrix[j].append((term, tfidf))
 
-            # مقدار وزن کلمه مورد نظر محاسبه می‌شود
-            x = df[word].sum()
+        self.tf_idf_matrix = tfidf_matrix
+        # self.tf_idf_matrix = pd.DataFrame(self.tf_idf_matrix, columns=self.vector.get_feature_names_out())
 
-            # نرمال کردن وزن کلمه
-            first = df.values.min()
-            last = df.values.max()
-            result = (x - first) / (last - first)
-
-            return result
-        except:
-            print("Not Found")
+    # def search_query(self, query):
+    #
+    #     df = pd.read_csv('TagsDatabase.csv',header=None)
+    #
+    #     df.columns = ['docID','tags']
+    #     df.docID = pd.Series(["D"+str(ind) for ind in df.docID])
+    #
+    #     df.tags = df.tags.str.replace(","," ")
+    #     df.tags = df.tags.str.replace(r'\W',' ')
+    #     df.tags = df.tags.str.strip().str.lower()
+    #
+    #     if not path.exists('term_doc_matrix.csv'):
+    #
+    #         print("Nopeeee")
+    #         all_text = " ".join(df.tags.values)
+    #         vocab = np.unique(word_tokenize(all_text))
+    #         vocab = [word for word in vocab if word not in stopwords.words('english')]
+    #
+    #         similarity_index = term_document_matrix(df,vocab,'docID','tags')
+    #         similarity_index = tf_idf_score(similarity_index, df.docID.values)
+    #
+    #         similarity_index.to_csv('term_doc_matrix.csv')
+    #
+    #     else:
+    #
+    #         similarity_index = pd.read_csv('term_doc_matrix.csv')
+    #         similarity_index = similarity_index.set_index('Unnamed: 0')
+    #
+    #     query = query_processing(query)
+    #     similarity_index = query_score(similarity_index,query)
+    #
+    #     cosines = cosine_similarity(similarity_index, df.docID.values, 'query_tf_idf')
+    #     indices = retrieve_index(df, cosines, 'docID')
+    #
+    #     return json.dumps(list(indices))
