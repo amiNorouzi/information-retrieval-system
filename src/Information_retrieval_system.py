@@ -4,6 +4,7 @@ from hazm import word_tokenize
 from nltk.corpus import stopwords
 from pandas import DataFrame
 
+from src.Tokenizer import Tokenizer
 from src.utils import to_path
 
 
@@ -30,68 +31,38 @@ class Searcher:
         self.term_doc_matrix: DataFrame = DataFrame()
 
     def calc_term_doc(self):
-        """Calculate frequency of term in the document.
-
-        parameter:
-            data: DataFrame.
-            Frequency of word calculated against the data.
-
-            vocab: list of strings.
-            Vocabulary of the documents
-
-            document_index: str.
-            Column name for document index in DataFrame passed.
-
-            text: str
-            Column name containing text for all documents in DataFrame,
-
-        returns:
-            vocab_index: DataFrame.
-            DataFrame containing term document matrix.
-            """
+        # این کد یک DataFrame خالی با ستون‌هایی که نام آنها در ستون Searcher.col_name_doc_index قرار دارد و ردیف‌هایی
+        # که نام آنها در لیست vocab وجود دارد، ایجاد می‌کند. این DataFrame به شکل اولیه ماتریس اسناد و اصطلاحات را برای
+        # الگوریتم جستجوی معکوس ایجاد می‌کند. همچنین، با بهینه‌سازی با استفاده از fillna(0)، تمام مقادیر در ماتریس به
+        # صفر تنظیم می‌شوند.
 
         self.term_doc_matrix = pd.DataFrame(columns=self.data_frame[Searcher.col_name_doc_index],
                                             index=self.vocab).fillna(0)
 
-        for word in self.term_doc_matrix.index:
+        # این کد، ماتریس اسناد - اصطلاحات را برای الگوریتم جستجوی معکوس ایجاد می‌کند. برای هر یک از اصطلاحات موجود
+        # در لیست vocab و هر یک از سند‌های موجود در داده‌ی ورودی، تعداد تکرار آن اصطلاح در آن سند را محاسبه می‌کند و
+        # این تعداد را در ماتریس مورد نظر در سطر متناظر با آن اصطلاح و در ستون متناظر با آن سند قرار می‌دهد. با استفاده
+        # از fillna(0) نیز، این کد تمامی محل‌هایی که در ماتریس خالی هستند را با صفر پر می‌کند.
 
+        for word in self.term_doc_matrix.index:
             for doc in self.data_frame[Searcher.col_name_doc_index]:
                 freq = \
                     self.data_frame[self.data_frame[Searcher.col_name_doc_index] == doc][
-                        Searcher.col_name_doc_text].values[
-                        0].count(word)
+                        Searcher.col_name_doc_text].values[0].count(word)
                 self.term_doc_matrix.loc[word, doc] = freq
 
         return self.term_doc_matrix
 
-    def tf_idf_score(self, inv_df='inverse_document_frequency'):
-        """
-        Calculate tf-idf score for vocabulary in documents
-
-        parameter:
-            vocab_index: DataFrame.
-            Term document matrix.
-
-            document_index: list or tuple.
-            Series containing document ids.
-
-            inv_df: str.
-            Name of the column with calculated inverse document frequencies.
-
-        returns:
-            vocab_index: DataFrame.
-            DataFrame containing term document matrix and document frequencies, inverse document frequencies and tf-idf scores
-        """
+    def tf_idf_score(self):
         total_docx = len(self.data_frame.docID.values)
         self.term_doc_matrix['document_frequency'] = self.term_doc_matrix.sum(axis=1)
         self.term_doc_matrix['inverse_document_frequency'] = np.log2(
             total_docx / self.term_doc_matrix['document_frequency'])
 
         for word in self.term_doc_matrix.index:
-
             for doc in self.data_frame.docID.values:
                 tf_idf = np.log2(1 + self.term_doc_matrix.loc[word, doc]) * np.log2(
-                    self.term_doc_matrix.loc[word][inv_df])
+                    self.term_doc_matrix.loc[word]['inverse_document_frequency'])
                 if word in self.term_doc_matrix.index and word in self.term_doc_matrix.columns:
                     self.term_doc_matrix.loc[word, 'tf_idf_' + doc] = tf_idf
 
@@ -149,36 +120,19 @@ class Searcher:
 
         return pd.Series(cosine_scores)
 
-    def retrieve_index(self, data, cosine_scores, document_index):
-        """
-        Retrieves indices for the corresponding document cosine scores
+    def retrieve_index(self) -> list[int]:
+        cosines = self.cosine_similarity(self.data_frame.docID.values, 'query_tf_idf')
+        self.data_frame = self.data_frame.set_index(Searcher.col_name_doc_index)
+        self.data_frame['scores'] = cosines
 
-        parameters:
-            data: DataFrame.
-            DataFrame containing document ids and text.
-
-            cosine_scores: Series.
-            Series containing document cosine scores.
-
-            document_index: str.
-            Column name containing document ids in data.
-
-        returns:
-            data: DataFrame.
-            Original DataFrame with cosine scores added as column.
-        """
-
-        data = data.set_index(document_index)
-        data['scores'] = cosine_scores
-
-        return data.reset_index().sort_values('scores', ascending=False).head(10).index
+        return self.data_frame.reset_index().sort_values('scores', ascending=False).head(10).index
 
     def tokenize(self):
-        self.data_frame.tags = self.data_frame.tags.str.replace(",", " ")
-        self.data_frame.tags = self.data_frame.tags.str.replace(r'\W', ' ')
-        self.data_frame.tags = self.data_frame.tags.str.strip().str.lower()
-        # tokenizer = Tokenizer()
-        self.vocab = np.unique(word_tokenize(" ".join(self.data_frame.tags.values)))
+        # self.data_frame.tags = self.data_frame.tags.str.replace(",", " ")
+        # self.data_frame.tags = self.data_frame.tags.str.replace(r'\W', ' ')
+        # self.data_frame.tags = self.data_frame.tags.str.strip().str.lower()
+        tokenizer = Tokenizer()
+        self.vocab = np.unique(tokenizer.tokenize(" ".join(self.data_frame.tags.values)))
 
     def remove_stop_words(self):
         self.vocab = [
@@ -190,10 +144,7 @@ class Searcher:
         query = self.query_processing(query)
         self.query_score(query)
 
-        cosines = self.cosine_similarity(self.data_frame.docID.values, 'query_tf_idf')
-        indices = self.retrieve_index(self.data_frame, cosines, 'docID')
-
-        return list(indices)
+        return list(self.retrieve_index())
 
 
 if __name__ == "__main__":
