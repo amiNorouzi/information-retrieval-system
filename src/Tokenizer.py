@@ -46,7 +46,7 @@ class Tokenizer:
                 self.bons = set([verb.split('#')[0] for verb in self.verbs])
                 self.verbe = set([bon + 'ه' for bon in self.bons] + ['ن' + bon + 'ه' for bon in self.bons])
 
-    def tokenize(self, text: str):
+    def tokenize(self, text: str) -> list[str]:
         text = self.pattern.sub(r' \1 ', text.replace('\n', ' ').replace('\t', ' '))
 
         tokens = [word for word in text.split(' ') if word]
