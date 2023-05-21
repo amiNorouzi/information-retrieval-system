@@ -20,4 +20,4 @@ if __name__ == "__main__":
     print('>>> tf_idf: _____________________________________________________________________')
     print(searcher.term_doc_matrix)
     searcher.term_doc_matrix.to_csv('../out/term_doc_matrix.csv')
-    print(searcher.search_query('25 batman tom'))
+    print(searcher.search_query('movie drink'))

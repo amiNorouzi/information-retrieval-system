@@ -1,3 +1,4 @@
+import nltk
 import numpy as np
 import pandas as pd
 from nltk.corpus import stopwords
@@ -6,6 +7,8 @@ from parsivar import FindStems
 
 from src.Tokenizer import Tokenizer
 from src.utils import to_path
+
+nltk.download('stopwords')
 
 
 class Searcher:
@@ -130,7 +133,7 @@ class Searcher:
 
     def tokenize(self):
         tokenizer = Tokenizer()
-        self.vocab = tokenizer.tokenize(" ".join(self.data_frame.tags.values))
+        self.vocab = tokenizer.tokenize(self.data_frame)
 
     def remove_stop_words(self):
         self.vocab = [

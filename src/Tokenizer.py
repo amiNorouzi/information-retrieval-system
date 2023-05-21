@@ -3,6 +3,8 @@
 import codecs
 import re
 
+from pandas import DataFrame
+
 from utils import default_verbs
 
 
@@ -46,7 +48,11 @@ class Tokenizer:
                 self.bons = set([verb.split('#')[0] for verb in self.verbs])
                 self.verbe = set([bon + 'ه' for bon in self.bons] + ['ن' + bon + 'ه' for bon in self.bons])
 
-    def tokenize(self, text: str) -> list[str]:
+    def tokenize(self, data_frame: DataFrame) -> list[str]:
+        data_frame.tags = data_frame.tags.str.replace(",", " ")
+        data_frame.tags = data_frame.tags.str.replace(r'\W', ' ')
+        data_frame.tags = data_frame.tags.str.strip().str.lower()
+        text = " ".join(data_frame.tags.values)
         text = self.pattern.sub(r' \1 ', text.replace('\n', ' ').replace('\t', ' '))
 
         tokens = [word for word in text.split(' ') if word]
