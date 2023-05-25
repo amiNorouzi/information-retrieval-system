@@ -5,16 +5,8 @@ import re
 
 from pandas import DataFrame
 
-from utils import default_verbs
-
 
 class Tokenizer:
-    """
-    >>> tokenizer = Tokenizer()
-    >>> tokenizer.tokenize('این جمله (خیلی) پیچیده نیست!!!')
-    ['این', 'جمله', '(', 'خیلی', ')', 'پیچیده', 'نیست', '!!!']
-    """
-
     def __init__(self, verbs_file=default_verbs, join_verb_parts=True):
         self._join_verb_parts = join_verb_parts
         self.pattern = re.compile(r'([؟!?]+|\d[\d.:/\\]+|[:.،؛»\])}"«\[({])')  # TODO \d

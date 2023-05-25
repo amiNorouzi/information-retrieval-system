@@ -17,6 +17,7 @@ if __name__ == "__main__":
     searcher.calc_term_doc()
     print('>>> term document: ______________________________________________________________')
     searcher.tf_idf_score()
+    print(searcher.term_doc_matrix)
     print('>>> tf_idf: _____________________________________________________________________')
     print(searcher.term_doc_matrix)
     searcher.term_doc_matrix.to_csv('../out/term_doc_matrix.csv')

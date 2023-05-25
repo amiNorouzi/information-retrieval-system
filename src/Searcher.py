@@ -5,7 +5,6 @@ from nltk.corpus import stopwords
 from pandas import DataFrame
 from parsivar import FindStems
 
-from src.Tokenizer import Tokenizer
 from src.utils import to_path
 
 nltk.download('stopwords')
@@ -13,8 +12,6 @@ nltk.download('stopwords')
 
 class Searcher:
     # ? static properties
-    persian_stopwords_file = open(to_path("persian_stopwords.txt"), 'r', encoding='utf-8')
-    persian_stop_words = {x[:-1] for x in persian_stopwords_file.readlines()}
     english_stop_words = set(stopwords.words('english'))
     stemmer = FindStems()
     # ? Column name for document index in DataFrame passed
@@ -82,7 +79,7 @@ class Searcher:
         query = query.strip().lower()
         query = " ".join([
             word for word in query.split()
-            if word not in Searcher.english_stop_words and word not in Searcher.persian_stop_words
+            if word not in Searcher.english_stop_words
         ])
 
         return query
@@ -132,13 +129,16 @@ class Searcher:
         return self.data_frame.reset_index().sort_values('scores', ascending=False).head(10).index
 
     def tokenize(self):
-        tokenizer = Tokenizer()
-        self.vocab = tokenizer.tokenize(self.data_frame)
+        self.data_frame.tags = self.data_frame.tags.str.replace(",", " ")
+        self.data_frame.tags = self.data_frame.tags.str.replace(r'\W', ' ')
+        self.data_frame.tags = self.data_frame.tags.str.strip().str.lower()
+        text = " ".join(self.data_frame.tags.values)
+        self.vocab = nltk.word_tokenize(text)
 
     def remove_stop_words(self):
         self.vocab = [
             word for word in self.vocab
-            if word not in Searcher.english_stop_words and word not in Searcher.persian_stop_words
+            if word not in Searcher.english_stop_words
         ]
 
     def stem_words(self):
