@@ -35,7 +35,7 @@ class Searcher:
         # ? Term document matrix
         self.term_doc_matrix: DataFrame = DataFrame()
 
-    def calc_term_doc(self):
+    def calc_term_doc(self) -> None:
         # این کد یک DataFrame خالی با ستون‌هایی که نام آنها در ستون Searcher.col_name_doc_index قرار دارد و ردیف‌هایی
         # که نام آنها در لیست vocab وجود دارد، ایجاد می‌کند. این DataFrame به شکل اولیه ماتریس اسناد و اصطلاحات را برای
         # الگوریتم جستجوی معکوس ایجاد می‌کند. همچنین، با بهینه‌سازی با استفاده از fillna(0)، تمام مقادیر در ماتریس به
@@ -56,9 +56,7 @@ class Searcher:
                         Searcher.col_name_doc_text].values[0].count(word)
                 self.term_doc_matrix.loc[word, doc] = freq
 
-        return self.term_doc_matrix
-
-    def tf_idf_score(self):
+    def calc_tf_idf(self) -> None:
         total_docx = len(self.data_frame.docID.values)
         self.term_doc_matrix['document_frequency'] = self.term_doc_matrix.sum(axis=1)
         self.term_doc_matrix['inverse_document_frequency'] = np.log2(
@@ -73,8 +71,6 @@ class Searcher:
                 if word in self.term_doc_matrix.index and word in self.term_doc_matrix.columns:
                     self.term_doc_matrix.loc[word, 'tf_idf_' + doc] = tf_idf
 
-        return self.term_doc_matrix
-
     @staticmethod
     def query_processing(query: str) -> str:
         """
@@ -84,7 +80,7 @@ class Searcher:
         query = re.sub(r'\W', ' ', query)
         query = query.strip().lower()
         query = " ".join([
-            word for word in query.split()
+            Searcher.stemmer.stem(word) for word in query.split()
             if word not in Searcher.english_stop_words
         ])
 
@@ -127,12 +123,12 @@ class Searcher:
 
         return pd.Series(cosine_scores)
 
-    def retrieve_index(self) -> list[int]:
+    def retrieve_indices(self) -> list[int]:
         cosines = self.cosine_similarity(self.data_frame.docID.values, 'query_tf_idf')
         self.data_frame = self.data_frame.set_index(Searcher.col_name_doc_index)
         self.data_frame['scores'] = cosines
 
-        return self.data_frame.reset_index().sort_values('scores', ascending=False).head(10).index
+        return list(self.data_frame.reset_index().sort_values('scores', ascending=False).index)
 
     def tokenize(self) -> None:
         self.data_frame.tags = self.data_frame.tags.str.replace(",", " ")
@@ -163,4 +159,4 @@ class Searcher:
         query = self.query_processing(query)
         self.query_score(query)
 
-        return list(self.retrieve_index())
+        return self.retrieve_indices()
