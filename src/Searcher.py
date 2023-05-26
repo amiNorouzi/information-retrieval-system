@@ -1,10 +1,14 @@
+import re
+from math import isinf
+
 import nltk
 import numpy as np
 import pandas as pd
+from nltk import PorterStemmer
 from nltk.corpus import stopwords
 from pandas import DataFrame
-from parsivar import FindStems
 
+from src.Tokenizer import Tokenizer
 from src.utils import to_path
 
 nltk.download('stopwords')
@@ -13,7 +17,7 @@ nltk.download('stopwords')
 class Searcher:
     # ? static properties
     english_stop_words = set(stopwords.words('english'))
-    stemmer = FindStems()
+    stemmer = PorterStemmer()
     # ? Column name for document index in DataFrame passed
     col_name_doc_index = 'docID'
     # ? Column name containing text for all documents in DataFrame
@@ -62,8 +66,10 @@ class Searcher:
 
         for word in self.term_doc_matrix.index:
             for doc in self.data_frame.docID.values:
-                tf_idf = np.log2(1 + self.term_doc_matrix.loc[word, doc]) * np.log2(
-                    self.term_doc_matrix.loc[word]['inverse_document_frequency'])
+                tf_idf = 0
+                if not isinf(self.term_doc_matrix.loc[word]['inverse_document_frequency']):
+                    tf_idf = np.log2(1 + self.term_doc_matrix.loc[word, doc]) * np.log2(
+                        self.term_doc_matrix.loc[word]['inverse_document_frequency'])
                 if word in self.term_doc_matrix.index and word in self.term_doc_matrix.columns:
                     self.term_doc_matrix.loc[word, 'tf_idf_' + doc] = tf_idf
 
@@ -75,7 +81,7 @@ class Searcher:
          این تابع حذف کاراکترهای غیر الفبایی، تبدیل کلمات به حروف کوچک و
          حذف کلمات از لیست کلمات را انجام میدهد.
         """
-        # query = re.sub(r'\W', ' ', query)
+        query = re.sub(r'\W', ' ', query)
         query = query.strip().lower()
         query = " ".join([
             word for word in query.split()
@@ -84,7 +90,7 @@ class Searcher:
 
         return query
 
-    def query_score(self, query):
+    def query_score(self, query) -> None:
         """
         این قطعه کد، با استفاده از روش tf-idf میزان اهمیت هر کلمه در جستجوی کاربر را برای مجموعه اسناد مورد نظر
         محاسبه می‌کند. در این روش، برای هر کلمه در جستجوی کاربر، ابتدا تعداد تکرار آن در متن اصلی (freq) محاسبه
@@ -128,28 +134,29 @@ class Searcher:
 
         return self.data_frame.reset_index().sort_values('scores', ascending=False).head(10).index
 
-    def tokenize(self):
+    def tokenize(self) -> None:
         self.data_frame.tags = self.data_frame.tags.str.replace(",", " ")
         self.data_frame.tags = self.data_frame.tags.str.replace(r'\W', ' ')
         self.data_frame.tags = self.data_frame.tags.str.strip().str.lower()
         text = " ".join(self.data_frame.tags.values)
-        self.vocab = nltk.word_tokenize(text)
+        tokenizer = Tokenizer()
+        self.vocab = tokenizer.tokenize(text)
 
-    def remove_stop_words(self):
+    def remove_stop_words(self) -> None:
         self.vocab = [
             word for word in self.vocab
             if word not in Searcher.english_stop_words
         ]
 
-    def stem_words(self):
+    def stem_words(self) -> None:
         other_stem_words: list[str] = []
 
         for word in self.vocab:
-            other_stem_words.append(Searcher.stemmer.convert_to_stem(word))
+            other_stem_words.append(Searcher.stemmer.stem(word))
 
         self.vocab = other_stem_words
 
-    def vectorize(self):
+    def vectorize(self) -> None:
         self.vocab = np.unique(self.vocab)
 
     def search_query(self, query: str) -> list[int]:

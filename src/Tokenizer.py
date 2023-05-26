@@ -1,62 +1,95 @@
-# coding: utf-8
-
-import codecs
 import re
-
-from pandas import DataFrame
+from re import Pattern
 
 
 class Tokenizer:
-    def __init__(self, verbs_file=default_verbs, join_verb_parts=True):
-        self._join_verb_parts = join_verb_parts
-        self.pattern = re.compile(r'([؟!?]+|\d[\d.:/\\]+|[:.،؛»\])}"«\[({])')  # TODO \d
+    # starting quotes
+    STARTING_QUOTES = [
+        (re.compile(r'^\"'), r'``'),
+        (re.compile(r'(``)'), r' \1 '),
+        (re.compile(r"([ (\[{<])(\"|\'{2})"), r'\1 `` '),
+    ]
 
-        if join_verb_parts:
-            self.after_verbs = {
-                'ام', 'ای', 'است', 'ایم', 'اید', 'اند', 'بودم', 'بودی', 'بود', 'بودیم', 'بودید',
-                'بودند', 'باشم', 'باشی', 'باشد', 'باشیم', 'باشید', 'باشند', 'شده_ام', 'شده_ای',
-                'شده_است', 'شده_ایم', 'شده_اید', 'شده_اند', 'شده_بودم', 'شده_بودی', 'شده_بود',
-                'شده_بودیم', 'شده_بودید', 'شده_بودند', 'شده_باشم', 'شده_باشی', 'شده_باشد', 'شده_باشیم',
-                'شده_باشید', 'شده_باشند', 'نشده_ام', 'نشده_ای', 'نشده_است', 'نشده_ایم', 'نشده_اید',
-                'نشده_اند', 'نشده_بودم', 'نشده_بودی', 'نشده_بود', 'نشده_بودیم', 'نشده_بودید',
-                'نشده_بودند', 'نشده_باشم', 'نشده_باشی', 'نشده_باشد', 'نشده_باشیم', 'نشده_باشید',
-                'نشده_باشند', 'شوم', 'شوی', 'شود', 'شویم', 'شوید', 'شوند', 'شدم', 'شدی', 'شد', 'شدیم',
-                'شدید', 'شدند', 'نشوم', 'نشوی', 'نشود', 'نشویم', 'نشوید', 'نشوند', 'نشدم', 'نشدی',
-                'نشد', 'نشدیم', 'نشدید', 'نشدند', 'می‌شوم', 'می‌شوی', 'می‌شود', 'می‌شویم', 'می‌شوید',
-                'می‌شوند', 'می‌شدم', 'می‌شدی', 'می‌شد', 'می‌شدیم', 'می‌شدید', 'می‌شدند', 'نمی‌شوم',
-                'نمی‌شوی', 'نمی‌شود', 'نمی‌شویم', 'نمی‌شوید', 'نمی‌شوند', 'نمی‌شدم', 'نمی‌شدی',
-                'نمی‌شد', 'نمی‌شدیم', 'نمی‌شدید', 'نمی‌شدند', 'خواهم_شد', 'خواهی_شد', 'خواهد_شد',
-                'خواهیم_شد', 'خواهید_شد', 'خواهند_شد', 'نخواهم_شد', 'نخواهی_شد', 'نخواهد_شد',
-                'نخواهیم_شد', 'نخواهید_شد', 'نخواهند_شد'
-            }
+    # punctuation
+    PUNCTUATION = [
+        (re.compile(r'([:,])(\D)'), r' \1 \2'),
+        (re.compile(r'([:,])$'), r' \1 '),
+        (re.compile(r'\.\.\.'), r' ... '),
+        (re.compile(r'[;@#$%&]'), r' \g<0> '),
+        (re.compile(r'([^.])(\.)([])}>"\']*)\s*$'), r'\1 \2\3 '),  # Handles the final period.
+        (re.compile(r'[?!]'), r' \g<0> '),
 
-            self.before_verbs = {
-                'خواهم', 'خواهی', 'خواهد', 'خواهیم', 'خواهید', 'خواهند', 'نخواهم', 'نخواهی', 'نخواهد',
-                'نخواهیم', 'نخواهید', 'نخواهند'
-            }
+        (re.compile(r"([^'])' "), r"\1 ' "),
+    ]
 
-            with codecs.open(verbs_file, encoding='utf8') as verbs_file:
-                self.verbs = list(reversed([verb.strip() for verb in verbs_file if verb]))
-                self.bons = set([verb.split('#')[0] for verb in self.verbs])
-                self.verbe = set([bon + 'ه' for bon in self.bons] + ['ن' + bon + 'ه' for bon in self.bons])
+    # Pads parentheses
+    PARENS_BRACKETS = (re.compile(r'[]\[(){}<>]'), r' \g<0> ')
 
-    def tokenize(self, data_frame: DataFrame) -> list[str]:
-        data_frame.tags = data_frame.tags.str.replace(",", " ")
-        data_frame.tags = data_frame.tags.str.replace(r'\W', ' ')
-        data_frame.tags = data_frame.tags.str.strip().str.lower()
-        text = " ".join(data_frame.tags.values)
-        text = self.pattern.sub(r' \1 ', text.replace('\n', ' ').replace('\t', ' '))
+    # Optionally: Convert parentheses, brackets and converts them to PTB symbols.
+    CONVERT_PARENTHESES = [
+        (re.compile(r'\('), '-LRB-'), (re.compile(r'\)'), '-RRB-'),
+        (re.compile(r'\['), '-LSB-'), (re.compile(r']'), '-RSB-'),
+        (re.compile(r'\{'), '-LCB-'), (re.compile(r'}'), '-RCB-')
+    ]
 
-        tokens = [word for word in text.split(' ') if word]
-        if self._join_verb_parts:
-            tokens = self.join_verb_parts(tokens)
-        return tokens
+    DOUBLE_DASHES = (re.compile(r'--'), r' -- ')
 
-    def join_verb_parts(self, tokens):
-        result = ['']
-        for token in reversed(tokens):
-            if token in self.before_verbs or (result[-1] in self.after_verbs and token in self.verbe):
-                result[-1] = token + '_' + result[-1]
-            else:
-                result.append(token)
-        return list(reversed(result[1:]))
+    # ending quotes
+    ENDING_QUOTES = [
+        (re.compile(r'"'), " '' "),
+        (re.compile(r'(\S)(\'\')'), r'\1 \2 '),
+        (re.compile(r"([^' ])('[sS]|'[mM]|'[dD]|') "), r"\1 \2 "),
+        (re.compile(r"([^' ])('ll|'LL|'re|'RE|'ve|'VE|n't|N'T) "), r"\1 \2 "),
+    ]
+
+    # List of contractions adapted from Robert MacIntyre's tokenizer.
+    CONTRACTIONS2 = [r"(?i)\b(can)(?#X)(not)\b",
+                     r"(?i)\b(d)(?#X)('ye)\b",
+                     r"(?i)\b(gim)(?#X)(me)\b",
+                     r"(?i)\b(gon)(?#X)(na)\b",
+                     r"(?i)\b(got)(?#X)(ta)\b",
+                     r"(?i)\b(lem)(?#X)(me)\b",
+                     r"(?i)\b(mor)(?#X)('n)\b",
+                     r"(?i)\b(wan)(?#X)(na)\s"]
+    CONTRACTIONS3 = [r"(?i) ('t)(?#X)(is)\b", r"(?i) ('t)(?#X)(was)\b"]
+    CONTRACTIONS4 = [r"(?i)\b(whad)(dd)(ya)\b",
+                     r"(?i)\b(wha)(t)(cha)\b"]
+    CONTRACTIONS2: list[Pattern] = list(map(re.compile, CONTRACTIONS2))
+    CONTRACTIONS3: list[Pattern] = list(map(re.compile, CONTRACTIONS3))
+
+    def tokenize(self, text, convert_parentheses=False, return_str=False):
+        for regexp, substitution in self.STARTING_QUOTES:
+            text = regexp.sub(substitution, text)
+
+        for regexp, substitution in self.PUNCTUATION:
+            text = regexp.sub(substitution, text)
+
+        # Handles parentheses.
+        regexp, substitution = self.PARENS_BRACKETS
+        text = regexp.sub(substitution, text)
+        # Optionally convert parentheses
+        if convert_parentheses:
+            for regexp, substitution in self.CONVERT_PARENTHESES:
+                text = regexp.sub(substitution, text)
+
+        # Handles double dash.
+        regexp, substitution = self.DOUBLE_DASHES
+        text = regexp.sub(substitution, text)
+
+        # add extra space to make things easier
+        text = " " + text + " "
+
+        for regexp, substitution in self.ENDING_QUOTES:
+            text = regexp.sub(substitution, text)
+
+        for regexp in self.CONTRACTIONS2:
+            text = regexp.sub(r' \1 \2 ', text)
+        for regexp in self.CONTRACTIONS3:
+            text = regexp.sub(r' \1 \2 ', text)
+
+        # We are not using CONTRACTIONS4 since
+        # they are also commented out in the SED scripts
+        # for regexp in self._contractions.CONTRACTIONS4:
+        #     text = regexp.sub(r' \1 \2 \3 ', text)
+
+        return text if return_str else text.split()
